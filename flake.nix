@@ -96,6 +96,10 @@
           serviceConfig = {
             ExecStart = "${self.packages.${system}.nordvpn}/bin/nordvpnd";
             Restart = "always";
+            # Ensure /var/lib/nordvpn is created and owned by the service user
+            StateDirectory = "nordvpn";
+            # Run the service as a dynamic user (optional, but recommended for security)
+            DynamicUser = true;
           };
         };
       };
