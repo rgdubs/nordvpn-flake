@@ -30,7 +30,6 @@
 
         nativeBuildInputs = with pkgs; [ dpkg patchelf makeWrapper ];
 
-        # Include sqlite along with other dependencies
         buildInputs = with pkgs; [
           glibc
           libgcc
@@ -38,10 +37,10 @@
           iptables
           iproute2
           procps
-          libxml2  # For libxml2.so.2
-          zlib     # For libz.so.1
-          openssl  # For libssl.so and libcrypto.so
-          sqlite   # For libsqlite3.so
+          libxml2
+          zlib
+          openssl
+          sqlite
         ];
 
         unpackPhase = "dpkg-deb -x $src .";
@@ -53,7 +52,10 @@
           if [ -d usr/lib/nordvpn ]; then cp -r usr/lib/nordvpn/* $out/lib/nordvpn/; fi
           if [ -d usr/share ]; then cp -r usr/share/* $out/share/; fi
 
-          # Ensure all binaries have the correct interpreter and RPATH
+          # Debug RPATH
+          echo "RPATH being set to: $out/lib/nordvpn:${pkgs.lib.makeLibraryPath buildInputs}"
+
+          # Patch binaries with RPATH
           for bin in $out/bin/nordvpn $out/bin/nordvpnd; do
             if [ -f "$bin" ]; then
               patchelf --set-interpreter "$(cat $NIX_CC/nix-support/dynamic-linker)" "$bin"
@@ -61,7 +63,7 @@
             fi
           done
 
-          # Wrap programs to ensure runtime dependencies are available
+          # Wrap programs for PATH and LD_LIBRARY_PATH
           wrapProgram $out/bin/nordvpn \
             --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}" \
             --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath buildInputs}"
@@ -83,11 +85,18 @@
       default = self.packages.${system}.nordvpn;
     };
 
-    nixosModules.nordvpn = { config, lib, pkgs, ... }: {
+    nixosModules.nordvpn = { config, lib, ... }: {
       options.services.nordvpn.enable = lib.mkEnableOption "NordVPN service";
 
       config = lib.mkIf config.services.nordvpn.enable {
         environment.systemPackages = [ self.packages.${system}.nordvpn ];
+
+        users.users.nordvpn = {
+          isSystemUser = true;
+          group = "nordvpn";
+          description = "NordVPN daemon user";
+        };
+        users.groups.nordvpn = {};
 
         systemd.services.nordvpnd = {
           description = "NordVPN Daemon";
@@ -96,10 +105,11 @@
           serviceConfig = {
             ExecStart = "${self.packages.${system}.nordvpn}/bin/nordvpnd";
             Restart = "always";
-            # Ensure /var/lib/nordvpn is created and owned by the service user
+            User = "nordvpn";
+            Group = "nordvpn";
             StateDirectory = "nordvpn";
-            # Run the service as a dynamic user (optional, but recommended for security)
-            DynamicUser = true;
+            CapabilityBoundingSet = "CAP_NET_ADMIN CAP_NET_RAW";
+            AmbientCapabilities = "CAP_NET_ADMIN CAP_NET_RAW";
           };
         };
       };
