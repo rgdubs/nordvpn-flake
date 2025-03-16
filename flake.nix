@@ -42,6 +42,7 @@
           zlib     # For libz.so.1
           openssl  # For libssl.so and libcrypto.so
           sqlite # Added for libsqlite3.so
+          stdenv.cc.cc.lib  # Add if needed
         ];
 
         unpackPhase = "dpkg-deb -x $src .";
