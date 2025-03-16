@@ -30,7 +30,6 @@
 
         nativeBuildInputs = with pkgs; [ dpkg patchelf makeWrapper ];
 
-        # Include libxml2 and other dependencies
         buildInputs = with pkgs; [
           glibc
           libgcc
@@ -38,34 +37,38 @@
           iptables
           iproute2
           procps
-          libxml2  # Added for libxml2.so.2
-          zlib     # For libz.so.1
-          openssl  # For libssl.so and libcrypto.so
-          sqlite # Added for libsqlite3.so
-          stdenv.cc.cc.lib  # Add if needed
+          libxml2
+          zlib
+          openssl
+          sqlite  # Should point to the out output with lib/
         ];
 
         unpackPhase = "dpkg-deb -x $src .";
 
         installPhase = ''
           mkdir -p $out/bin $out/lib/nordvpn $out/share
-          if [ -d usr/bin ]; then cp -r usr/bin/* $out/bin/; fi
-          if [ -d usr/sbin ]; then cp -r usr/sbin/* $out/bin/; fi
-          if [ -d usr/lib/nordvpn ]; then cp -r usr/lib/nordvpn/* $out/lib/nordvpn/; fi
-          if [ -d usr/share ]; then cp -r usr/share/* $out/share/; fi
+          cp -r usr/bin/* $out/bin/
+          cp -r usr/lib/nordvpn/* $out/lib/nordvpn/
+          cp -r usr/share/* $out/share/
 
-          # Patch binaries with RPATH
+          # Define RPATH explicitly
+          rpath="$out/lib/nordvpn:${pkgs.sqlite}/lib:${pkgs.lib.makeLibraryPath buildInputs}"
+          echo "Setting RPATH: $rpath"
+
+          # Patch binaries
           for bin in $out/bin/nordvpn $out/bin/nordvpnd; do
             if [ -f "$bin" ]; then
               patchelf --set-interpreter "$(cat $NIX_CC/nix-support/dynamic-linker)" "$bin"
-              patchelf --set-rpath "$out/lib/nordvpn:${pkgs.lib.makeLibraryPath buildInputs}" "$bin"
+              patchelf --set-rpath "$rpath" "$bin"
+              # Verify RPATH
+              echo "RPATH for $bin:"
+              readelf -d "$bin" | grep RPATH
             fi
           done
 
-          # Optional: Wrap programs (though RPATH should suffice)
+          # Wrap for PATH only
           wrapProgram $out/bin/nordvpn \
             --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}"
-
           wrapProgram $out/bin/nordvpnd \
             --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}"
         '';
@@ -87,7 +90,6 @@
 
       config = lib.mkIf config.services.nordvpn.enable {
         environment.systemPackages = [ self.packages.${system}.nordvpn ];
-
         systemd.services.nordvpnd = {
           description = "NordVPN Daemon";
           after = [ "network.target" ];
