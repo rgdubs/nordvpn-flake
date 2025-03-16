@@ -41,6 +41,7 @@
           libxml2  # Added for libxml2.so.2
           zlib     # For libz.so.1
           openssl  # For libssl.so and libcrypto.so
+          sqlite # Added for libsqlite3.so
         ];
 
         unpackPhase = "dpkg-deb -x $src .";
