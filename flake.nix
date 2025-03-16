@@ -41,7 +41,7 @@
           libxml2  # For libxml2.so.2
           zlib     # For libz.so.1
           openssl  # For libssl.so and libcrypto.so
-          sqlite   # Added for libsqlite3.so
+          sqlite   # For libsqlite3.so
         ];
 
         unpackPhase = "dpkg-deb -x $src .";
@@ -53,7 +53,7 @@
           if [ -d usr/lib/nordvpn ]; then cp -r usr/lib/nordvpn/* $out/lib/nordvpn/; fi
           if [ -d usr/share ]; then cp -r usr/share/* $out/share/; fi
 
-          # Patch binaries with RPATH
+          # Ensure all binaries have the correct interpreter and RPATH
           for bin in $out/bin/nordvpn $out/bin/nordvpnd; do
             if [ -f "$bin" ]; then
               patchelf --set-interpreter "$(cat $NIX_CC/nix-support/dynamic-linker)" "$bin"
@@ -61,12 +61,14 @@
             fi
           done
 
-          # Wrap programs for PATH (RPATH handles libraries)
+          # Wrap programs to ensure runtime dependencies are available
           wrapProgram $out/bin/nordvpn \
-            --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}"
+            --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}" \
+            --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath buildInputs}"
 
           wrapProgram $out/bin/nordvpnd \
-            --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}"
+            --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}" \
+            --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath buildInputs}"
         '';
 
         meta = with pkgs.lib; {
