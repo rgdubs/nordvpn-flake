@@ -30,6 +30,7 @@
 
         nativeBuildInputs = with pkgs; [ dpkg patchelf makeWrapper ];
 
+        # Include sqlite along with other dependencies
         buildInputs = with pkgs; [
           glibc
           libgcc
@@ -37,21 +38,22 @@
           iptables
           iproute2
           procps
-          libxml2
-          zlib
-          openssl
-          sqlite  # Should provide libsqlite3.so
+          libxml2  # For libxml2.so.2
+          zlib     # For libz.so.1
+          openssl  # For libssl.so and libcrypto.so
+          sqlite   # Added for libsqlite3.so
         ];
 
         unpackPhase = "dpkg-deb -x $src .";
 
         installPhase = ''
           mkdir -p $out/bin $out/lib/nordvpn $out/share
-          cp -r usr/bin/* $out/bin/
-          cp -r usr/lib/nordvpn/* $out/lib/nordvpn/
-          cp -r usr/share/* $out/share/
+          if [ -d usr/bin ]; then cp -r usr/bin/* $out/bin/; fi
+          if [ -d usr/sbin ]; then cp -r usr/sbin/* $out/bin/; fi
+          if [ -d usr/lib/nordvpn ]; then cp -r usr/lib/nordvpn/* $out/lib/nordvpn/; fi
+          if [ -d usr/share ]; then cp -r usr/share/* $out/share/; fi
 
-          # Patch binaries
+          # Patch binaries with RPATH
           for bin in $out/bin/nordvpn $out/bin/nordvpnd; do
             if [ -f "$bin" ]; then
               patchelf --set-interpreter "$(cat $NIX_CC/nix-support/dynamic-linker)" "$bin"
@@ -59,9 +61,10 @@
             fi
           done
 
-          # Wrap for PATH only
+          # Wrap programs for PATH (RPATH handles libraries)
           wrapProgram $out/bin/nordvpn \
             --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}"
+
           wrapProgram $out/bin/nordvpnd \
             --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}"
         '';
@@ -83,6 +86,7 @@
 
       config = lib.mkIf config.services.nordvpn.enable {
         environment.systemPackages = [ self.packages.${system}.nordvpn ];
+
         systemd.services.nordvpnd = {
           description = "NordVPN Daemon";
           after = [ "network.target" ];
