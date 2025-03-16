@@ -40,38 +40,30 @@
           libxml2
           zlib
           openssl
-          sqlite.out  # Explicitly use the out output with lib/
+          sqlite  # Should provide libsqlite3.so
         ];
 
         unpackPhase = "dpkg-deb -x $src .";
 
         installPhase = ''
           mkdir -p $out/bin $out/lib/nordvpn $out/share
-          cp -r usr/bin/* $out/bin/ || echo "Error: Failed to copy usr/bin"
-          cp -r usr/lib/nordvpn/* $out/lib/nordvpn/ || echo "Error: Failed to copy usr/lib/nordvpn"
-          cp -r usr/share/* $out/share/ || echo "Error: Failed to copy usr/share"
-
-          # Define RPATH
-          rpath="$out/lib/nordvpn:${pkgs.sqlite.out}/lib:${pkgs.lib.makeLibraryPath buildInputs}"
-          echo "Setting RPATH: $rpath"
+          cp -r usr/bin/* $out/bin/
+          cp -r usr/lib/nordvpn/* $out/lib/nordvpn/
+          cp -r usr/share/* $out/share/
 
           # Patch binaries
           for bin in $out/bin/nordvpn $out/bin/nordvpnd; do
             if [ -f "$bin" ]; then
-              patchelf --set-interpreter "$(cat $NIX_CC/nix-support/dynamic-linker)" "$bin" || echo "Error: patchelf interpreter failed for $bin"
-              patchelf --set-rpath "$rpath" "$bin" || echo "Error: patchelf rpath failed for $bin"
-              echo "RPATH for $bin:"
-              readelf -d "$bin" | grep RPATH || echo "Error: readelf failed for $bin"
-            else
-              echo "Error: $bin not found"
+              patchelf --set-interpreter "$(cat $NIX_CC/nix-support/dynamic-linker)" "$bin"
+              patchelf --set-rpath "$out/lib/nordvpn:${pkgs.lib.makeLibraryPath buildInputs}" "$bin"
             fi
           done
 
-          # Wrap programs
+          # Wrap for PATH only
           wrapProgram $out/bin/nordvpn \
-            --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}" || echo "Error: wrapProgram failed for nordvpn"
+            --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}"
           wrapProgram $out/bin/nordvpnd \
-            --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}" || echo "Error: wrapProgram failed for nordvpnd"
+            --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}"
         '';
 
         meta = with pkgs.lib; {
