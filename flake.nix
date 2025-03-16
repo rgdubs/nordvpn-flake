@@ -85,12 +85,20 @@
       default = self.packages.${system}.nordvpn;
     };
 
-    nixosModules.nordvpn = { config, lib, ... }: {
-      options.services.nordvpn.enable = lib.mkEnableOption "NordVPN service";
+nixosModules.nordvpn = { config, lib, pkgs, ... }:
+    let
+      nordvpnPkg = self.packages.${system}.nordvpn;
+    in
+    {
+      options.services.nordvpn = {
+        enable = lib.mkEnableOption "NordVPN service";
+      };
 
       config = lib.mkIf config.services.nordvpn.enable {
-        environment.systemPackages = [ self.packages.${system}.nordvpn ];
+        # Add NordVPN package to system packages
+        environment.systemPackages = [ nordvpnPkg ];
 
+        # Create a dedicated user and group for NordVPN
         users.users.nordvpn = {
           isSystemUser = true;
           group = "nordvpn";
@@ -98,18 +106,28 @@
         };
         users.groups.nordvpn = {};
 
+        # Ensure /var/lib/nordvpn exists with correct permissions
+        systemd.tmpfiles.rules = [
+          "d /var/lib/nordvpn 0755 nordvpn nordvpn -"
+          "d /var/lib/nordvpn/data 0755 nordvpn nordvpn -"
+        ];
+
+        # Define the systemd service for nordvpnd
         systemd.services.nordvpnd = {
           description = "NordVPN Daemon";
           after = [ "network.target" ];
           wantedBy = [ "multi-user.target" ];
           serviceConfig = {
-            ExecStart = "${self.packages.${system}.nordvpn}/bin/nordvpnd";
+            Type = "simple";
+            ExecStart = "${nordvpnPkg}/bin/nordvpnd";
             Restart = "always";
             User = "nordvpn";
             Group = "nordvpn";
             StateDirectory = "nordvpn";
-            CapabilityBoundingSet = "CAP_NET_ADMIN CAP_NET_RAW";
-            AmbientCapabilities = "CAP_NET_ADMIN CAP_NET_RAW";
+            RuntimeDirectory = "nordvpn";
+            WorkingDirectory = "/var/lib/nordvpn";
+            # Ensure iptables and other tools are available
+            Environment = "PATH=${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}";
           };
         };
       };
