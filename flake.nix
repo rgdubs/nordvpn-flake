@@ -40,37 +40,38 @@
           libxml2
           zlib
           openssl
-          sqlite  # Should point to the out output with lib/
+          sqlite.out  # Explicitly use the out output with lib/
         ];
 
         unpackPhase = "dpkg-deb -x $src .";
 
         installPhase = ''
           mkdir -p $out/bin $out/lib/nordvpn $out/share
-          cp -r usr/bin/* $out/bin/
-          cp -r usr/lib/nordvpn/* $out/lib/nordvpn/
-          cp -r usr/share/* $out/share/
+          cp -r usr/bin/* $out/bin/ || echo "Error: Failed to copy usr/bin"
+          cp -r usr/lib/nordvpn/* $out/lib/nordvpn/ || echo "Error: Failed to copy usr/lib/nordvpn"
+          cp -r usr/share/* $out/share/ || echo "Error: Failed to copy usr/share"
 
-          # Define RPATH explicitly
-          rpath="$out/lib/nordvpn:${pkgs.sqlite}/lib:${pkgs.lib.makeLibraryPath buildInputs}"
+          # Define RPATH
+          rpath="$out/lib/nordvpn:${pkgs.sqlite.out}/lib:${pkgs.lib.makeLibraryPath buildInputs}"
           echo "Setting RPATH: $rpath"
 
           # Patch binaries
           for bin in $out/bin/nordvpn $out/bin/nordvpnd; do
             if [ -f "$bin" ]; then
-              patchelf --set-interpreter "$(cat $NIX_CC/nix-support/dynamic-linker)" "$bin"
-              patchelf --set-rpath "$rpath" "$bin"
-              # Verify RPATH
+              patchelf --set-interpreter "$(cat $NIX_CC/nix-support/dynamic-linker)" "$bin" || echo "Error: patchelf interpreter failed for $bin"
+              patchelf --set-rpath "$rpath" "$bin" || echo "Error: patchelf rpath failed for $bin"
               echo "RPATH for $bin:"
-              readelf -d "$bin" | grep RPATH
+              readelf -d "$bin" | grep RPATH || echo "Error: readelf failed for $bin"
+            else
+              echo "Error: $bin not found"
             fi
           done
 
-          # Wrap for PATH only
+          # Wrap programs
           wrapProgram $out/bin/nordvpn \
-            --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}"
+            --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}" || echo "Error: wrapProgram failed for nordvpn"
           wrapProgram $out/bin/nordvpnd \
-            --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}"
+            --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.iptables pkgs.iproute2 pkgs.procps ]}" || echo "Error: wrapProgram failed for nordvpnd"
         '';
 
         meta = with pkgs.lib; {
@@ -85,7 +86,7 @@
       default = self.packages.${system}.nordvpn;
     };
 
-    nixosModules.nordvpn = { config, lib, ... }: {
+    nixosModules.nordvpn = { config, lib, pkgs, ... }: {
       options.services.nordvpn.enable = lib.mkEnableOption "NordVPN service";
 
       config = lib.mkIf config.services.nordvpn.enable {
