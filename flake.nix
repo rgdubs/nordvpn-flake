@@ -2,7 +2,7 @@
   description = "A flake for installing NordVPN on NixOS";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
   };
 
   outputs = { self, nixpkgs, ... }:
@@ -24,8 +24,8 @@
         version = "3.20.0";
 
         src = pkgs.fetchurl {
-          url = "https://repo.nordvpn.com/deb/nordvpn/debian/pool/main/n/nordvpn/nordvpn_3.20.0_amd64.deb";
-          sha256 = "0fq0zfygn9disi2d1h61xg7qskbb0snhymdsmslm1zzd6c4x5wfz";
+          url = "https://repo.nordvpn.com/deb/nordvpn/debian/pool/main/n/nordvpn/nordvpn_4.2.0_amd64.deb";
+          sha256 = "1shz6x6igbhxksfrsrcgyrgfqb61hmdwwn32mbl67jv0rnw9k1il";
         };
 
         nativeBuildInputs = with pkgs; [ dpkg patchelf makeWrapper ];
